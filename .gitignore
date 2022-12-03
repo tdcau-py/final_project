@@ -3,3 +3,4 @@ access_token.py
 
 # ignore path __pycache__
 __pycache__/
+.idea/
