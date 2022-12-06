@@ -39,14 +39,17 @@ class VKUser:
         url = self._get_url(self.METHOD_USERS_SEARCH)
         params = {'access_token': self.USER_TOKEN,
                   'v': self.VK_API_VERSION,
-                  'group_id': group_id, }
+                  'group_id': group_id,
+                  'fields': 'photo_max, photo_id',
+                  }
         response = requests.get(url, params=params)
 
         return response.json()
 
 
-def write_msg(vk, user_id, message):
-    vk.method('messages.send', {'user_id': user_id, 'message': message,  'random_id': randrange(10 ** 7), })
+def write_msg(vk, user_id, message, photo_id: str = None):
+    vk.method('messages.send', {'user_id': user_id, 'message': message,  'random_id': randrange(10 ** 7),
+                                'attachment': f'photo{photo_id}'})
 
 
 if __name__ == '__main__':
@@ -73,6 +76,9 @@ if __name__ == '__main__':
                     searching_people = vk_user.search_users(217477914)
                     # write_msg(vk_session.vk, event.user_id, myself_info[0]['first_name'])
                     print(searching_people)
+                    write_msg(vk_session.vk, event.user_id,
+                              searching_people['response']['items'][0]['id'],
+                              searching_people['response']['items'][0]['photo_id'])
                 else:
                     write_msg(vk_session.vk, event.user_id, "Не поняла вашего ответа...")
                 
