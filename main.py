@@ -64,78 +64,100 @@ class VKUser:
 
         return response.json()
 
-    def get_popular_photos(self, user_id: int):
+    def get_popular_photos(self, user_id: int) -> dict:
         """Возвращает самые популярные фотографии пользователя"""
         user_photos = self._get_photos(user_id)
         photos_data = {}
 
-        if int(user_photos['response']['count']) > 0:
-            for item in user_photos['response']['items']:
-                if len(photos_data) < 3:
-                    photos_data[item['id']] = {'likes': int(item['likes']['count']),
-                                               'comments': int(item['comments']['count'])}
+        try:
+            if user_photos['response']['count'] > 0:
+                for item in user_photos['response']['items']:
+                    if len(photos_data) < 3:
+                        photos_data[item['id']] = {'likes': item['likes']['count'],
+                                                   'comments': item['comments']['count']}
 
-                else:
-                    for photo_data in photos_data:
-                        if item['likes']['count'] > photos_data[photo_data]['likes'] and \
-                                item['comments']['count'] > photos_data[photo_data]['comments']:
-                            photos_data.pop(photo_data)
-                            photos_data[item['id']] = {'likes': item['likes']['count'],
-                                                       'comments': item['comments']['count']}
-                            break
+                    else:
+                        for photo_data in photos_data:
+                            if item['likes']['count'] > photos_data[photo_data]['likes'] and \
+                                    item['comments']['count'] > photos_data[photo_data]['comments']:
+                                photos_data.pop(photo_data)
+                                photos_data[item['id']] = {'likes': item['likes']['count'],
+                                                           'comments': item['comments']['count']}
+                                break
 
-                        elif item['likes']['count'] > photos_data[photo_data]['likes'] and \
-                                item['comments']['count'] == photos_data[photo_data]['comments']:
-                            photos_data.pop(photo_data)
-                            photos_data[item['id']] = {'likes': item['likes']['count'],
-                                                       'comments': item['comments']['count']}
-                            break
+                            elif item['likes']['count'] > photos_data[photo_data]['likes'] and \
+                                    item['comments']['count'] == photos_data[photo_data]['comments']:
+                                photos_data.pop(photo_data)
+                                photos_data[item['id']] = {'likes': item['likes']['count'],
+                                                           'comments': item['comments']['count']}
+                                break
 
-                        elif item['likes']['count'] == photos_data[photo_data]['likes'] and \
-                                item['comments']['count'] > photos_data[photo_data]['comments']:
-                            photos_data.pop(photo_data)
-                            photos_data[item['id']] = {'likes': item['likes']['count'],
-                                                       'comments': item['comments']['count']}
-                            break
+                            elif item['likes']['count'] == photos_data[photo_data]['likes'] and \
+                                    item['comments']['count'] > photos_data[photo_data]['comments']:
+                                photos_data.pop(photo_data)
+                                photos_data[item['id']] = {'likes': item['likes']['count'],
+                                                           'comments': item['comments']['count']}
+                                break
+        except KeyError:
+            photos_data[user_id] = {'count': 0}
 
         return photos_data
 
 
-def write_msg(vk, user_id, message, photo_id: str = None):
-    vk_site = 'https://vk.com/'
-    vk.method('messages.send', {'user_id': user_id, 'message': f'{vk_site}{message}',  'random_id': randrange(10 ** 7),
-                                'attachment': f'photo{photo_id}'})
+class VKBotMessage:
+    def __init__(self, vk_session, user_id, request):
+        self.vk = vk_session
+        self.id = user_id
+
+        if request == "привет":
+            self.greet_msg(self.vk, self.id, f"Привет, {event.user_id}")
+
+        elif request == "пока":
+            self.write_msg(self.vk, self.id, "Пока((")
+            
+        elif request == 'поиск':
+            vk_user = VKUser(event.user_id)  # пользователь, для которого производится поиск пары
+            myself_info = vk_user.get_myself_user_info(self.vk)  # сбор информации о пользователе
+            searching_people = vk_user.search_users(myself_info)  # поиск подходящих пар
+
+            for i in range(len(searching_people['response']['items'])):
+                photos_info = vk_user.get_popular_photos(searching_people['response']['items'][i]['id'])
+
+                for photo in photos_info:
+                    self.search_result_msg(self.vk,
+                                           self.id,
+                                           searching_people['response']['items'][i]['domain'],
+                                           f'{searching_people["response"]["items"][i]["id"]}_{photo}')
+        else:
+            self.undefined_msg(self.vk, self.id, "Не поняла вашего ответа...")
+
+    def greet_msg(self, vk, user_id, message):
+        """Выводит приветственное сообщение"""
+        vk.method('messages.send', {'user_id': user_id,
+                                    'message': message,
+                                    'random_id': randrange(10 ** 7)})
+
+    def search_result_msg(self, vk, user_id, message, photo_id: str = None):
+        vk_site = 'https://vk.com/'
+        vk.method('messages.send', {'user_id': user_id,
+                                    'message': f'{vk_site}{message}',
+                                    'random_id': randrange(10 ** 7),
+                                    'attachment': f'photo{photo_id}', })
+
+    def undefined_msg(self, vk, user_id, message):
+        """Выводит сообщение о непонятной команде"""
+        vk.method('messages.send', {'user_id': user_id,
+                                    'message': message,
+                                    'random_id': randrange(10 ** 7), })
 
 
 if __name__ == '__main__':
     vk_session = VKUserAuth()
     longpoll = VkLongPoll(vk_session.vk)
 
-    # vk_user = VKUser(749333920)
-    # myself_info = vk_user.get_myself_user_info(vk_session.vk, 749333920)
-    # print(myself_info)
-
     for event in longpoll.listen():
         if event.type == VkEventType.MESSAGE_NEW:
 
             if event.to_me:
                 request = event.text
-
-                if request == "привет":
-                    write_msg(vk_session.vk, event.user_id, f"Хай, {event.user_id}")
-                elif request == "пока":
-                    write_msg(vk_session.vk, event.user_id, "Пока((")
-                elif request == 'поиск':
-                    vk_user = VKUser(event.user_id)  # пользователь, для которого производится поиск пары
-                    myself_info = vk_user.get_myself_user_info(vk_session.vk)  # сбор информации о пользователе
-                    searching_people = vk_user.search_users(myself_info)  # поиск подходящих пар
-
-                    photos_info = vk_user.get_popular_photos(searching_people['response']['items'][1]['id'])
-                    print(photos_info)
-
-                    write_msg(vk_session.vk, event.user_id,
-                              searching_people['response']['items'][1]['domain'],
-                              searching_people['response']['items'][1]['domain'])
-                else:
-                    write_msg(vk_session.vk, event.user_id, "Не поняла вашего ответа...")
-                
+                bot_msg = VKBotMessage(vk_session.vk, event.user_id, request)
