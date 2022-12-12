@@ -18,6 +18,10 @@ class VKUserAuth:
 class VKUser:
     """Собирает данные о пользователе"""
     USER_TOKEN = os.getenv('VK_ACCESS_USER_TOKEN')
+
+    if not USER_TOKEN:
+        USER_TOKEN = input('Введите токен пользователя: ')
+
     URL = 'https://api.vk.com/method/'
     METHOD_USERS_SEARCH = 'users.search'
     METHOD_USERS_GET = 'users.get'
@@ -48,7 +52,8 @@ class VKUser:
         params = {'fields': 'bdate, city, sex, relation, domain',
                   'city': search_criteria[0]['city']['id'],
                   'sex': 1,
-                  'status': status
+                  'status': status,
+                  'count': 1000,
                   }
         response = requests.get(url, params={**self.params, **params})
 
@@ -74,7 +79,7 @@ class VKUser:
                 for item in user_photos['response']['items']:
                     if len(photos_data) < 3:
                         photos_data[item['id']] = {'likes': item['likes']['count'],
-                                                   'comments': item['comments']['count']}
+                                                   'comments': item['comments']['count'], }
 
                     else:
                         for photo_data in photos_data:
@@ -114,20 +119,22 @@ class VKBotMessage:
 
         elif request == "пока":
             self.write_msg(self.vk, self.id, "Пока((")
-            
+
         elif request == 'поиск':
             vk_user = VKUser(event.user_id)  # пользователь, для которого производится поиск пары
             myself_info = vk_user.get_myself_user_info(self.vk)  # сбор информации о пользователе
             searching_people = vk_user.search_users(myself_info)  # поиск подходящих пар
 
             for i in range(len(searching_people['response']['items'])):
-                photos_info = vk_user.get_popular_photos(searching_people['response']['items'][i]['id'])
+                user_id = searching_people['response']['items'][i]['id']
+                user_domain = searching_people['response']['items'][i]['domain']
+                photos_info = vk_user.get_popular_photos(user_id)
 
                 for photo in photos_info:
-                    self.search_result_msg(self.vk,
-                                           self.id,
-                                           searching_people['response']['items'][i]['domain'],
-                                           f'{searching_people["response"]["items"][i]["id"]}_{photo}')
+                    self.search_result_photo_msg(self.vk,
+                                                 self.id,
+                                                 user_domain,
+                                                 f'{user_id}_{photo}')
         else:
             self.undefined_msg(self.vk, self.id, "Не поняла вашего ответа...")
 
@@ -135,14 +142,15 @@ class VKBotMessage:
         """Выводит приветственное сообщение"""
         vk.method('messages.send', {'user_id': user_id,
                                     'message': message,
-                                    'random_id': randrange(10 ** 7)})
+                                    'random_id': randrange(10 ** 7), })
 
-    def search_result_msg(self, vk, user_id, message, photo_id: str = None):
+    def search_result_photo_msg(self, vk, user_id, message, photos):
+        """Присылает популярные фотографии"""
         vk_site = 'https://vk.com/'
         vk.method('messages.send', {'user_id': user_id,
                                     'message': f'{vk_site}{message}',
-                                    'random_id': randrange(10 ** 7),
-                                    'attachment': f'photo{photo_id}', })
+                                    'attachment': f'photo{photos}',
+                                    'random_id': randrange(10 ** 7), })
 
     def undefined_msg(self, vk, user_id, message):
         """Выводит сообщение о непонятной команде"""
