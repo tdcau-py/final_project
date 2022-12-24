@@ -11,7 +11,7 @@ class VKUserAuth:
     GROUP_TOKEN = os.getenv('VK_TOKEN')
 
     if not GROUP_TOKEN:
-        TOKEN = input('Token: ')
+        GROUP_TOKEN = input('Token: ')
 
     vk = vk_api.VkApi(token=GROUP_TOKEN)
 
@@ -29,8 +29,8 @@ class VKUser:
     METHOD_USERS_PHOTOS = 'photos.get'
     VK_API_VERSION = '5.131'
 
-    def __init__(self, id):
-        self.id = id
+    def __init__(self, vk_user_id):
+        self.user_id = vk_user_id
         self.params = {'access_token': self.USER_TOKEN,
                        'v': self.VK_API_VERSION, }
 
@@ -40,7 +40,7 @@ class VKUser:
 
     def get_myself_user_info(self, vk) -> List[dict]:
         """Информация о пользователе"""
-        values = {'user_ids': self.id, 'fields': 'bdate, sex, city, status'}
+        values = {'user_ids': self.user_id, 'fields': 'bdate, sex, city, status'}
         return vk.method(self.METHOD_USERS_GET, values=values)
 
     def search_users(self, search_criteria: List[dict]) -> 'json':
@@ -117,82 +117,78 @@ class VKUser:
 
 
 class VKBot:
-    def __init__(self, vk_session, user_id, request: str):
-        self.vk = vk_session
-        self.id = user_id
-        self.request = request.lower()
-        self.greet_msg(self.vk, self.id)
+    def __init__(self):
+        self.vk_auth = VKUserAuth()
+        self.vk = self.vk_auth.vk
+        self.longpoll = VkLongPoll(self.vk)
 
-        if self.request == 'поиск':
-            vk_user = VKUser(event.user_id)  # пользователь, для которого производится поиск пары
-            myself_info: List[dict] = vk_user.get_myself_user_info(self.vk)  # сбор информации о пользователе
-            self.get_additional_info(self.vk, self.id, myself_info)
-            searching_people = vk_user.search_users(myself_info)  # поиск подходящих пар
-
-            for i in range(len(searching_people['response']['items'])):
-                user_id = searching_people['response']['items'][i]['id']
-                user_domain = searching_people['response']['items'][i]['domain']
-                photos_info = vk_user.get_popular_photos(user_id)
-
-                for photo in photos_info:
-                    self.search_result_photo_msg(self.vk,
-                                                 self.id,
-                                                 user_domain,
-                                                 f'{user_id}_{photo}')
-        else:
-            self.undefined_msg(self.vk, self.id)
-
-    def write_msg(self, vk, user_id, message):
+    def write_msg(self, user_id, message, attachment=None):
         """Отправляет сообщение пользователю"""
-        vk.method('messages.send', {'user_id': user_id,
-                                    'message': message,
-                                    'random_id': randrange(10 ** 7)})
+        self.vk.method('messages.send', {'user_id': user_id,
+                                         'message': message,
+                                         'attachment': attachment,
+                                         'random_id': randrange(10 ** 7)})
 
-    def greet_msg(self, vk, user_id):
+    def greet_msg(self, user_id):
         """Выводит приветственное сообщение"""
         message = """
             Привет!
             Для поиска пары отправьте сообщение с текстом \"поиск\"
             """
 
-        self.write_msg(vk, user_id, message)
-        # vk.method('messages.send', {'user_id': user_id,
-        #                             'message': message,
-        #                             'random_id': randrange(10 ** 7), })
+        self.write_msg(user_id, message)
 
     def search_result_photo_msg(self, vk, user_id, message, photos):
         """Присылает популярные фотографии"""
         vk_site = 'https://vk.com/'
+        message += vk_site
         vk.method('messages.send', {'user_id': user_id,
-                                    'message': f'{vk_site}{message}',
+                                    'message': message,
                                     'attachment': f'photo{photos}',
                                     'random_id': randrange(10 ** 7), })
 
-    def undefined_msg(self, vk, user_id):
+    def undefined_msg(self, user_id):
         """Выводит сообщение о непонятной команде"""
         message = "Не поняла вашего ответа..."
-        vk.method('messages.send', {'user_id': user_id,
-                                    'message': message,
-                                    'random_id': randrange(10 ** 7), })
+        self.vk.method('messages.send', {'user_id': user_id,
+                                         'message': message,
+                                         'random_id': randrange(10 ** 7), })
 
-    def get_additional_info(self, vk, user_id, user_info):
+    def get_additional_info(self, user_id, user_info):
         """Проверка пользовательских данных и запрос дополнительной информации"""
         data = user_info[0]
+        ...
 
-        if not data['bdate']:
-            message = 'Введите возраст, с которого начинать поиск (мин. 16): '
-            vk.method('messages.send', {'user.id': user_id,
-                                        'message': message,
-                                        'random_id': randrange(10 ** 7)})
+    def get_id_photos(self):
+        """Возвращает id фотографий найденного человека"""
+        ...
 
 
 if __name__ == '__main__':
-    vk_session = VKUserAuth()
-    longpoll = VkLongPoll(vk_session.vk)
+    bot = VKBot()
 
-    for event in longpoll.listen():
+    for event in bot.longpoll.listen():
         if event.type == VkEventType.MESSAGE_NEW:
 
             if event.to_me:
-                request = event.text
-                bot_msg = VKBot(vk_session.vk, event.user_id, request)
+                request = event.text.lower()
+                user_id = event.user_id
+                bot.greet_msg(user_id)
+
+                if request == 'поиск':
+                    vk_user = VKUser(user_id)  # пользователь, для которого производится поиск пары
+                    myself_info = vk_user.get_myself_user_info(bot.vk)  # сбор информации о пользователе
+                    bot.get_additional_info(user_id, myself_info)  # проверка наличия всех необходимых данных
+                    searching_people = vk_user.search_users(myself_info)  # поиск подходящих пар
+
+                    for i in range(len(searching_people['response']['items'])):
+                        user_id = searching_people['response']['items'][i]['id']
+                        user_domain = searching_people['response']['items'][i]['domain']
+                        photos_info = vk_user.get_popular_photos(user_id)
+
+                        for photo in photos_info:
+                            bot.search_result_photo_msg(user_id,
+                                                        user_domain,
+                                                        f'{user_id}_{photo}')
+                else:
+                    bot.undefined_msg(user_id)
