@@ -1,4 +1,5 @@
 from random import randrange
+from typing import List
 import requests
 import os
 import vk_api
@@ -37,20 +38,26 @@ class VKUser:
         """Возвращает URL-адрес с передачей метода API"""
         return f'{self.URL}{method}'
 
-    def get_myself_user_info(self, vk):
+    def get_myself_user_info(self, vk) -> List[dict]:
         """Информация о пользователе"""
         values = {'user_ids': self.id, 'fields': 'bdate, sex, city, status'}
         return vk.method(self.METHOD_USERS_GET, values=values)
 
-    def search_users(self, search_criteria: list) -> 'json':
+    def search_users(self, search_criteria: List[dict]) -> 'json':
         """Поиск людей по критериям"""
         city = ''
         sex = 0
         status = 1
 
+        for criteria in search_criteria:
+            if criteria['city']:
+                city = criteria['city']['id']
+            else:
+                ...
+
         url = self._get_url(self.METHOD_USERS_SEARCH)
         params = {'fields': 'bdate, city, sex, relation, domain',
-                  'city': search_criteria[0]['city']['id'],
+                  'city': city,
                   'sex': 1,
                   'status': status,
                   'count': 1000,
@@ -109,20 +116,17 @@ class VKUser:
         return photos_data
 
 
-class VKBotMessage:
-    def __init__(self, vk_session, user_id, request):
+class VKBot:
+    def __init__(self, vk_session, user_id, request: str):
         self.vk = vk_session
         self.id = user_id
+        self.request = request.lower()
+        self.greet_msg(self.vk, self.id)
 
-        if request == "привет":
-            self.greet_msg(self.vk, self.id, f"Привет, {event.user_id}")
-
-        elif request == "пока":
-            self.write_msg(self.vk, self.id, "Пока((")
-
-        elif request == 'поиск':
+        if self.request == 'поиск':
             vk_user = VKUser(event.user_id)  # пользователь, для которого производится поиск пары
-            myself_info = vk_user.get_myself_user_info(self.vk)  # сбор информации о пользователе
+            myself_info: List[dict] = vk_user.get_myself_user_info(self.vk)  # сбор информации о пользователе
+            self.get_additional_info(self.vk, self.id, myself_info)
             searching_people = vk_user.search_users(myself_info)  # поиск подходящих пар
 
             for i in range(len(searching_people['response']['items'])):
@@ -136,13 +140,25 @@ class VKBotMessage:
                                                  user_domain,
                                                  f'{user_id}_{photo}')
         else:
-            self.undefined_msg(self.vk, self.id, "Не поняла вашего ответа...")
+            self.undefined_msg(self.vk, self.id)
 
-    def greet_msg(self, vk, user_id, message):
-        """Выводит приветственное сообщение"""
+    def write_msg(self, vk, user_id, message):
+        """Отправляет сообщение пользователю"""
         vk.method('messages.send', {'user_id': user_id,
                                     'message': message,
-                                    'random_id': randrange(10 ** 7), })
+                                    'random_id': randrange(10 ** 7)})
+
+    def greet_msg(self, vk, user_id):
+        """Выводит приветственное сообщение"""
+        message = """
+            Привет!
+            Для поиска пары отправьте сообщение с текстом \"поиск\"
+            """
+
+        self.write_msg(vk, user_id, message)
+        # vk.method('messages.send', {'user_id': user_id,
+        #                             'message': message,
+        #                             'random_id': randrange(10 ** 7), })
 
     def search_result_photo_msg(self, vk, user_id, message, photos):
         """Присылает популярные фотографии"""
@@ -152,11 +168,22 @@ class VKBotMessage:
                                     'attachment': f'photo{photos}',
                                     'random_id': randrange(10 ** 7), })
 
-    def undefined_msg(self, vk, user_id, message):
+    def undefined_msg(self, vk, user_id):
         """Выводит сообщение о непонятной команде"""
+        message = "Не поняла вашего ответа..."
         vk.method('messages.send', {'user_id': user_id,
                                     'message': message,
                                     'random_id': randrange(10 ** 7), })
+
+    def get_additional_info(self, vk, user_id, user_info):
+        """Проверка пользовательских данных и запрос дополнительной информации"""
+        data = user_info[0]
+
+        if not data['bdate']:
+            message = 'Введите возраст, с которого начинать поиск (мин. 16): '
+            vk.method('messages.send', {'user.id': user_id,
+                                        'message': message,
+                                        'random_id': randrange(10 ** 7)})
 
 
 if __name__ == '__main__':
@@ -168,4 +195,4 @@ if __name__ == '__main__':
 
             if event.to_me:
                 request = event.text
-                bot_msg = VKBotMessage(vk_session.vk, event.user_id, request)
+                bot_msg = VKBot(vk_session.vk, event.user_id, request)
