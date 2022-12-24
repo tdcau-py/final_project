@@ -85,31 +85,32 @@ class VKUser:
             if user_photos['response']['count'] > 0:
                 for item in user_photos['response']['items']:
                     if len(photos_data) < 3:
-                        photos_data[item['id']] = {'likes': item['likes']['count'],
-                                                   'comments': item['comments']['count'], }
+                        photos_data[f'photo{item["owner_id"]}_{item["id"]}'] = {'likes': item['likes']['count'],
+                                                                                'comments': item['comments']['count'], }
 
                     else:
                         for photo_data in photos_data:
                             if item['likes']['count'] > photos_data[photo_data]['likes'] and \
                                     item['comments']['count'] > photos_data[photo_data]['comments']:
                                 photos_data.pop(photo_data)
-                                photos_data[item['id']] = {'likes': item['likes']['count'],
-                                                           'comments': item['comments']['count']}
+                                photos_data[f'photo{item["owner_id"]}_{item["id"]}'] = {'likes': item['likes']['count'],
+                                                                                        'comments': item['comments']['count']}
                                 break
 
                             elif item['likes']['count'] > photos_data[photo_data]['likes'] and \
                                     item['comments']['count'] == photos_data[photo_data]['comments']:
                                 photos_data.pop(photo_data)
-                                photos_data[item['id']] = {'likes': item['likes']['count'],
-                                                           'comments': item['comments']['count']}
+                                photos_data[f'photo{item["owner_id"]}_{item["id"]}'] = {'likes': item['likes']['count'],
+                                                                                        'comments': item['comments']['count']}
                                 break
 
                             elif item['likes']['count'] == photos_data[photo_data]['likes'] and \
                                     item['comments']['count'] > photos_data[photo_data]['comments']:
                                 photos_data.pop(photo_data)
-                                photos_data[item['id']] = {'likes': item['likes']['count'],
-                                                           'comments': item['comments']['count']}
+                                photos_data[f'photo{item["owner_id"]}_{item["id"]}'] = {'likes': item['likes']['count'],
+                                                                                        'comments': item['comments']['count']}
                                 break
+
         except KeyError:
             photos_data[user_id] = {'count': 0}
 
@@ -138,21 +139,25 @@ class VKBot:
 
         self.write_msg(user_id, message)
 
-    def search_result_photo_msg(self, vk, user_id, message, photos):
+    def user_url_msg(self, user_id, message):
+        """Отправляет url страницы пользователя"""
+        vk_url = 'https://vk.com/'
+        vk_url += message
+        self.write_msg(user_id, vk_url)
+
+    def search_result_photo_msg(self, user_id, message, photos):
         """Присылает популярные фотографии"""
-        vk_site = 'https://vk.com/'
-        message += vk_site
-        vk.method('messages.send', {'user_id': user_id,
-                                    'message': message,
-                                    'attachment': f'photo{photos}',
-                                    'random_id': randrange(10 ** 7), })
+        # vk.method('messages.send', {'user_id': user_id,
+        #                             'message': message,
+        #                             'attachment': f'photo{photos}',
+        #                             'random_id': randrange(10 ** 7), })
+
+        self.write_msg(user_id, message, photos)
 
     def undefined_msg(self, user_id):
         """Выводит сообщение о непонятной команде"""
         message = "Не поняла вашего ответа..."
-        self.vk.method('messages.send', {'user_id': user_id,
-                                         'message': message,
-                                         'random_id': randrange(10 ** 7), })
+        self.write_msg(user_id, message)
 
     def get_additional_info(self, user_id, user_info):
         """Проверка пользовательских данных и запрос дополнительной информации"""
@@ -172,23 +177,24 @@ if __name__ == '__main__':
 
             if event.to_me:
                 request = event.text.lower()
-                user_id = event.user_id
-                bot.greet_msg(user_id)
+                myself_user_id = event.user_id
+                bot.greet_msg(myself_user_id)
 
                 if request == 'поиск':
-                    vk_user = VKUser(user_id)  # пользователь, для которого производится поиск пары
+                    vk_user = VKUser(myself_user_id)  # пользователь, для которого производится поиск пары
                     myself_info = vk_user.get_myself_user_info(bot.vk)  # сбор информации о пользователе
-                    bot.get_additional_info(user_id, myself_info)  # проверка наличия всех необходимых данных
+                    bot.get_additional_info(myself_user_id, myself_info)  # проверка наличия всех необходимых данных
                     searching_people = vk_user.search_users(myself_info)  # поиск подходящих пар
 
                     for i in range(len(searching_people['response']['items'])):
                         user_id = searching_people['response']['items'][i]['id']
                         user_domain = searching_people['response']['items'][i]['domain']
+                        bot.user_url_msg(myself_user_id, user_domain)  # отправляет сообщение с url найденного пользователя
                         photos_info = vk_user.get_popular_photos(user_id)
 
                         for photo in photos_info:
                             bot.search_result_photo_msg(user_id,
                                                         user_domain,
-                                                        f'{user_id}_{photo}')
+                                                        photo)
                 else:
-                    bot.undefined_msg(user_id)
+                    bot.undefined_msg(myself_user_id)
