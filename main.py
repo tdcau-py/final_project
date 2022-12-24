@@ -178,7 +178,7 @@ if __name__ == '__main__':
             if event.to_me:
                 request = event.text.lower()
                 myself_user_id = event.user_id
-                bot.greet_msg(myself_user_id)
+                bot.greet_msg(myself_user_id) 
 
                 if request == 'поиск':
                     vk_user = VKUser(myself_user_id)  # пользователь, для которого производится поиск пары
