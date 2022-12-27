@@ -7,13 +7,6 @@ from sqlalchemy.orm import declarative_base, relationship, sessionmaker
 Base = declarative_base()
 
 
-class City(Base):
-    __tablename__ = 'city'
-
-    id = Column(Integer, primary_key=True)
-    name_city = Column(String(length=40), nullable=False)
-
-
 class People(Base):
     __tablename__ = 'people'
 
@@ -21,10 +14,8 @@ class People(Base):
     first_name = Column(String(length=40), nullable=False)
     last_name = Column(String(length=40), nullable=False)
     age = Column(Integer, nullable=False)
-    id_city = Column(Integer, ForeignKey('city.id'), nullable=False)
     user_id = Column(Integer, nullable=False, unique=True)
-
-    cities = relationship(City, backref='people')
+    url_profile = Column(String(length=40), nullable=False)
 
     def __str__(self):
         return f'User_VK: {self.first_name} {self.last_name}, user_id: {self.user_id}'
