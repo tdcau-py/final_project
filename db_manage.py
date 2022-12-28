@@ -1,8 +1,8 @@
 import os
 
 import sqlalchemy
-from sqlalchemy import Column, Integer, String, ForeignKey
-from sqlalchemy.orm import declarative_base, relationship, sessionmaker
+from sqlalchemy import Column, Integer, String
+from sqlalchemy.orm import declarative_base
 
 Base = declarative_base()
 
@@ -13,8 +13,7 @@ class People(Base):
     id = Column(Integer, primary_key=True)
     first_name = Column(String(length=40), nullable=False)
     last_name = Column(String(length=40), nullable=False)
-    age = Column(Integer, nullable=False)
-    user_id = Column(Integer, nullable=False, unique=True)
+    vk_id = Column(Integer, nullable=False, unique=True)
     url_profile = Column(String(length=40), nullable=False)
 
     def __str__(self):
@@ -23,23 +22,29 @@ class People(Base):
 
 def create_table(engine):
     """Создает таблицы"""
-    ...
+    # Base.metadata.drop_all(engine)
+    Base.metadata.create_all(engine)
 
 
-def create_db():
-    """Создает базу данных"""
-    LOGIN = os.getenv('DB_LOGIN')
-    PASSWORD = os.getenv('DB_PASSWORD')
-    HOST = os.getenv('DB_HOST')
-    PORT = os.getenv('DB_PORT')
-    DATABASE = 'vk_search_result'
+def add_searching_users(session, first_name, last_name, vk_id, url_profile):
+    """Добавление найденных пользователей в таблицу БД"""
+    user = People(first_name=first_name,
+                  last_name=last_name,
+                  vk_id=vk_id,
+                  url_profile=url_profile, )
 
-    DSN = f'postgresql://{LOGIN}:{PASSWORD}@{HOST}:{PORT}/{DATABASE}'
-    engine = sqlalchemy.create_engine(DSN)
+    session.add(user)
+    session.commit()
 
-    create_table(engine)
+    return True
 
-    Session = sessionmaker(bind=engine)
-    session = Session()
 
-    session.close()
+def check_repeated_users(session, vk_user_id):
+    """Проверка повторяющихся анкет"""
+    vk_user_id = int(vk_user_id)
+
+    if session.query(People.vk_id).filter_by(vk_id=vk_user_id).first():
+        return True
+
+    else:
+        return False
