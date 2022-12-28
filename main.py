@@ -70,7 +70,6 @@ class VKBot:
         photos_data = {}
 
         if type(user_photos) == dict:
-            # try:
             if user_photos['count'] > 0:
                 for item in user_photos['items']:
                     if len(photos_data) < 3:
@@ -99,9 +98,6 @@ class VKBot:
                                 photos_data[f'photo{item["owner_id"]}_{item["id"]}'] = {'likes': item['likes']['count'],
                                                                                         'comments': item['comments']['count']}
                                 break
-
-            # except KeyError:
-            #     photos_data[user_id] = {'count': 0}
 
         else:
             return user_photos
@@ -212,9 +208,11 @@ class VKBot:
 
         self.write_msg(user_id, message)
 
-    def search_result_photo_msg(self, user_id, photos=None, message=None):
+    def search_result_photo_msg(self, user_id, photos):
         """Присылает популярные фотографии"""
-        self.write_msg(user_id, message, photos)
+        self.vk.method('messages.send', {'user_id': user_id,
+                                         'attachment': photos,
+                                         'random_id': randrange(10 ** 7)})
 
     def undefined_msg(self, user_id):
         """Выводит сообщение о непонятной команде"""
@@ -242,13 +240,15 @@ if __name__ == '__main__':
 
     bot = VKBot()
 
+    my_id = int(input('Введите свой ID профиля Вконтакте: '))
+    bot.greet_msg(my_id)
+
     for event in bot.longpoll.listen():
         if event.type == VkEventType.MESSAGE_NEW:
 
             if event.to_me:
                 request = event.text.lower()
                 myself_user_id = event.user_id
-                bot.greet_msg(myself_user_id)
 
                 if request == 'поиск':
                     city_id = bot.get_city(myself_user_id)
@@ -267,9 +267,13 @@ if __name__ == '__main__':
                         repeat_user = check_repeated_users(session, user_id)
 
                         if not repeat_user:
-                            # отправляет ссылку на страницу найденного пользователя
+                            # добавляет пользователя в базу данных
                             add_searching_users(session, first_name, last_name, user_id, user_url_page)
+
+                            # отправляет ссылку на страницу найденного пользователя
                             bot.write_msg(myself_user_id, user_url_page)
+
+                            # отфильтровывает и отправляет 3 популярные фотографии
                             photos_info = bot.get_popular_photos(user_id)
 
                             if type(photos_info) == str:
@@ -284,8 +288,7 @@ if __name__ == '__main__':
 
                                         else:
                                             bot.search_result_photo_msg(myself_user_id,
-                                                                        photo,
-                                                                        user_id)
+                                                                        photo, )
 
                                 except TypeError:
                                     bot.write_msg(myself_user_id, 'Закрытый профиль.')
