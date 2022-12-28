@@ -1,16 +1,7 @@
-from random import randrange
-from typing import List, Any
 import os
-import vk_api
-from vk_api import ApiError
-from vk_api.longpoll import VkLongPoll, VkEventType
-from db_manage import add_searching_users, create_table, check_repeated_users
+from typing import List
 
-
-class VKUserAuth:
-    """Авторизация пользователя"""
-    GROUP_TOKEN = os.getenv('VK_TOKEN')
-    USER_TOKEN = os.getenv('VK_ACCESS_USER_TOKEN')
+from vk_api import vk_api
 
 
 class VKBot:
@@ -19,22 +10,12 @@ class VKBot:
     METHOD_USERS_PHOTOS = 'photos.get'
     METHOD_CITIES_GET = 'database.getCities'
     VK_API_VERSION = '5.131'
-    USER_TOKEN = VKUserAuth.USER_TOKEN
-    GROUP_TOKEN = VKUserAuth.GROUP_TOKEN
+    USER_TOKEN = os.getenv('VK_ACCESS_USER_TOKEN')
+    GROUP_TOKEN = os.getenv('VK_TOKEN')
 
     def __init__(self):
         self.params = {'access_token': self.USER_TOKEN,
                        'v': self.VK_API_VERSION, }
-
-        self.vk = vk_api.VkApi(token=self.GROUP_TOKEN)
-        self.longpoll = VkLongPoll(self.vk)
-
-    def write_msg(self, user_id, message, attachment=None):
-        """Отправляет сообщение пользователю"""
-        self.vk.method('messages.send', {'user_id': user_id,
-                                         'message': message,
-                                         'attachment': attachment,
-                                         'random_id': randrange(10 ** 7)})
 
     def get_myself_user_info(self, user_id, field: str = None) -> List[dict]:
         """Информация о пользователе"""
@@ -195,100 +176,3 @@ class VKBot:
         response = vk.method(self.METHOD_USERS_SEARCH, values=params)
 
         return response
-
-    def greet_msg(self, user_id):
-        """Выводит приветственное сообщение"""
-        message = """
-            Привет!
-            Для поиска пары отправьте сообщение с текстом \"поиск\"
-            """
-
-        self.write_msg(user_id, message)
-
-    def search_result_photo_msg(self, user_id, photos):
-        """Присылает популярные фотографии"""
-        self.vk.method('messages.send', {'user_id': user_id,
-                                         'attachment': photos,
-                                         'random_id': randrange(10 ** 7)})
-
-    def undefined_msg(self, user_id):
-        """Выводит сообщение о непонятной команде"""
-        message = "Не поняла вашего ответа..."
-        self.write_msg(user_id, message)
-
-
-if __name__ == '__main__':
-    import sqlalchemy
-    from sqlalchemy.orm import sessionmaker
-
-    LOGIN = os.getenv('DB_LOGIN')
-    PASSWORD = os.getenv('DB_PASSWORD')
-    HOST = os.getenv('DB_HOST')
-    PORT = os.getenv('DB_PORT')
-    DATABASE = 'vkinder_db'
-
-    DSN = f'postgresql://{LOGIN}:{PASSWORD}@{HOST}:{PORT}/{DATABASE}'
-    engine = sqlalchemy.create_engine(DSN)
-
-    create_table(engine)
-
-    Session = sessionmaker(bind=engine)
-    session = Session()
-
-    bot = VKBot()
-
-    for event in bot.longpoll.listen():
-        if event.type == VkEventType.MESSAGE_NEW:
-
-            if event.to_me:
-                request = event.text.lower()
-                myself_user_id = event.user_id
-
-                if request == 'поиск':
-                    city_id = bot.get_city(myself_user_id)
-                    sex = bot.get_sex(myself_user_id)
-                    age_from = bot.get_age_from(myself_user_id)
-                    age_to = bot.get_age_to(myself_user_id)
-
-                    searching_people = bot.search_users(city_id, sex, age_from, age_to)  # поиск подходящих пар
-
-                    for i in range(len(searching_people['items'])):
-                        user_id = searching_people['items'][i]['id']
-                        user_domain = searching_people['items'][i]['domain']
-                        first_name = searching_people['items'][i]['first_name']
-                        last_name = searching_people['items'][i]['last_name']
-                        user_url_page = 'https://vk.com/' + user_domain
-                        repeat_user = check_repeated_users(session, user_id)
-
-                        if not repeat_user:
-                            # добавляет пользователя в базу данных
-                            add_searching_users(session, first_name, last_name, user_id, user_url_page)
-
-                            # отправляет ссылку на страницу найденного пользователя
-                            bot.write_msg(myself_user_id, user_url_page)
-
-                            # отфильтровывает и отправляет 3 популярные фотографии
-                            photos_info = bot.get_popular_photos(user_id)
-
-                            if type(photos_info) == str:
-                                bot.write_msg(myself_user_id, photos_info)
-                                continue
-
-                            else:
-                                try:
-                                    for photo in photos_info:
-                                        if photos_info[photo] == user_id:
-                                            continue
-
-                                        else:
-                                            bot.search_result_photo_msg(myself_user_id,
-                                                                        photo, )
-
-                                except TypeError:
-                                    bot.write_msg(myself_user_id, 'Закрытый профиль.')
-
-                        else:
-                            continue
-
-                else:
-                    bot.undefined_msg(myself_user_id)
