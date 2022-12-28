@@ -1,16 +1,9 @@
 from random import randrange
-from typing import List, Any
 import os
 import vk_api
-from vk_api import ApiError
 from vk_api.longpoll import VkLongPoll, VkEventType
 from db_manage import add_searching_users, create_table, check_repeated_users
-
-
-class VKUserAuth:
-    """Авторизация пользователя"""
-    GROUP_TOKEN = os.getenv('VK_TOKEN')
-    USER_TOKEN = os.getenv('VK_ACCESS_USER_TOKEN')
+from api_functions import VKUsersInfo
 
 
 class VKBot:
@@ -19,120 +12,27 @@ class VKBot:
     METHOD_USERS_PHOTOS = 'photos.get'
     METHOD_CITIES_GET = 'database.getCities'
     VK_API_VERSION = '5.131'
-    USER_TOKEN = VKUserAuth.USER_TOKEN
-    GROUP_TOKEN = VKUserAuth.GROUP_TOKEN
+    GROUP_TOKEN = os.getenv('VK_TOKEN')
 
     def __init__(self):
-        self.params = {'access_token': self.USER_TOKEN,
-                       'v': self.VK_API_VERSION, }
-
         self.vk = vk_api.VkApi(token=self.GROUP_TOKEN)
         self.longpoll = VkLongPoll(self.vk)
 
-    def write_msg(self, user_id, message, attachment=None):
+    def write_msg(self, user_id, message):
         """Отправляет сообщение пользователю"""
         self.vk.method('messages.send', {'user_id': user_id,
                                          'message': message,
-                                         'attachment': attachment,
                                          'random_id': randrange(10 ** 7)})
-
-    def get_myself_user_info(self, user_id, field: str = None) -> List[dict]:
-        """Информация о пользователе"""
-        values = {'user_ids': user_id, 'fields': field}
-        return self.vk.method(self.METHOD_USERS_GET, values=values)
-
-    def _get_photos(self, user_id: int):
-        """Получает фотографии пользователя."""
-        params = {'album_id': 'profile',
-                  'owner_id': user_id,
-                  'extended': 1}
-
-        vk = vk_api.VkApi(token=self.USER_TOKEN)
-
-        try:
-            response = vk.method(self.METHOD_USERS_PHOTOS, values=params)
-            return response
-
-        except vk_api.ApiError as error:
-            return error
-
-    def get_popular_photos(self, user_id: int) -> str | ApiError | dict[str, dict[str, Any]] | Any:
-        """Возвращает самые популярные фотографии пользователя"""
-        user_photos = self._get_photos(user_id)
-        photos_data = {}
-
-        if type(user_photos) == dict:
-            if user_photos['count'] > 0:
-                for item in user_photos['items']:
-                    if len(photos_data) < 3:
-                        photos_data[f'photo{item["owner_id"]}_{item["id"]}'] = {'likes': item['likes']['count'],
-                                                                                'comments': item['comments']['count'], }
-
-                    else:
-                        for photo_data in photos_data:
-                            if item['likes']['count'] > photos_data[photo_data]['likes'] and \
-                                    item['comments']['count'] > photos_data[photo_data]['comments']:
-                                photos_data.pop(photo_data)
-                                photos_data[f'photo{item["owner_id"]}_{item["id"]}'] = {'likes': item['likes']['count'],
-                                                                                        'comments': item['comments']['count']}
-                                break
-
-                            elif item['likes']['count'] > photos_data[photo_data]['likes'] and \
-                                    item['comments']['count'] == photos_data[photo_data]['comments']:
-                                photos_data.pop(photo_data)
-                                photos_data[f'photo{item["owner_id"]}_{item["id"]}'] = {'likes': item['likes']['count'],
-                                                                                        'comments': item['comments']['count']}
-                                break
-
-                            elif item['likes']['count'] == photos_data[photo_data]['likes'] and \
-                                    item['comments']['count'] > photos_data[photo_data]['comments']:
-                                photos_data.pop(photo_data)
-                                photos_data[f'photo{item["owner_id"]}_{item["id"]}'] = {'likes': item['likes']['count'],
-                                                                                        'comments': item['comments']['count']}
-                                break
-
-        else:
-            return user_photos
-
-        return photos_data
-
-    def _get_id_city_by_name(self, name_city: str):
-        """Получает города из базы"""
-        params = {'country_id': 1,
-                  'need_all': 1,
-                  'count': 1000, }
-
-        vk = vk_api.VkApi(token=self.USER_TOKEN)
-        response = vk.method(self.METHOD_CITIES_GET, values=params)
-
-        try:
-            cities_list = response['items']
-
-            for city in cities_list:
-                if city['title'] == name_city.capitalize():
-                    city_id = city['id']
-                    return int(city_id)
-
-        except KeyError:
-            return 'Город не найден...'
 
     def get_city(self, user_id):
         """Запрашивает город, в котором необходимо осуществить поиск"""
-        try:
-            city = self.get_myself_user_info(user_id, 'city')
-            city_id = city[0]['city']['id']
-            return city_id
+        self.write_msg(user_id, 'Укажите город, в котором необходимо осуществить поиск...')
 
-        except Exception:
-            self.write_msg(user_id, 'Укажите город, в котором необходимо осуществить поиск...')
-
-            for event in self.longpoll.listen():
-                if event.type == VkEventType.MESSAGE_NEW:
-                    if event.to_me:
-                        name_city = event.text
-                        city_id = self._get_id_city_by_name(name_city)
-
-                        return city_id
+        for event in self.longpoll.listen():
+            if event.type == VkEventType.MESSAGE_NEW:
+                if event.to_me:
+                    name_city = event.text
+                    return name_city
 
     def get_age_from(self, user_id):
         """Выбор возраста"""
@@ -156,56 +56,31 @@ class VKBot:
 
     def get_sex(self, user_id):
         """Выбор пола людей для поиска"""
-        try:
-            sex = self.get_myself_user_info(user_id, 'sex')
+        self.write_msg(user_id, 'Укажите пол (мужской/женский) для поиска...')
 
-            if sex[0]['sex'] == 1:
-                return 2
+        for event in self.longpoll.listen():
+            if event.type == VkEventType.MESSAGE_NEW:
+                if event.to_me:
+                    sex = event.text.lower()
 
-            elif sex[0]['sex'] == 2:
-                return 1
+                    if sex == 'мужской':
+                        return 2
 
-        except vk_api.ApiError:
-            self.write_msg(user_id, 'Укажите пол (мужской/женский) для поиска...')
-
-            for event in self.longpoll.listen():
-                if event.type == VkEventType.MESSAGE_NEW:
-                    if event.to_me:
-                        sex = event.text.lower()
-
-                        if sex == 'мужской':
-                            return 2
-
-                        elif sex == 'женский':
-                            return 1
-
-    def search_users(self, city, sex, age_from, age_to, status=1) -> dict:
-        """Поиск людей по критериям"""
-        params = {'fields': 'bdate, city, sex, relation, domain',
-                  'city_id': city,
-                  'sex': sex,
-                  'status': status,
-                  'age_from': age_from,
-                  'age_to': age_to,
-                  'is_closed': 0,
-                  'count': 1000,
-                  }
-
-        vk = vk_api.VkApi(token=self.USER_TOKEN)
-        response = vk.method(self.METHOD_USERS_SEARCH, values=params)
-
-        return response
+                    elif sex == 'женский':
+                        return 1
 
     def greet_msg(self, user_id):
         """Выводит приветственное сообщение"""
         message = """
             Привет!
-            Для поиска пары отправьте сообщение с текстом \"поиск\"
+            Используйте следующие команды для управления ботом:
+                \"поиск\" - для поиска подходящих пар;
+                \"далее\" - для получения следующей анкеты.
             """
 
         self.write_msg(user_id, message)
 
-    def search_result_photo_msg(self, user_id, photos):
+    def popular_photo_msg(self, user_id, photos):
         """Присылает популярные фотографии"""
         self.vk.method('messages.send', {'user_id': user_id,
                                          'attachment': photos,
@@ -215,6 +90,45 @@ class VKBot:
         """Выводит сообщение о непонятной команде"""
         message = "Не поняла вашего ответа..."
         self.write_msg(user_id, message)
+
+    def return_users_info(self, city_id, sex, age_from, age_to, offset):
+        """Возвращает найденных пользователей по одному"""
+        searching_people = users_info.search_users(city_id, sex, age_from, age_to, offset)
+
+        for i in range(len(searching_people)):
+            user_id = searching_people[i]['id']
+            user_domain = searching_people[i]['domain']
+            first_name = searching_people[i]['first_name']
+            last_name = searching_people[i]['last_name']
+            user_url_page = 'https://vk.com/' + user_domain
+            repeat_user = check_repeated_users(session, user_id)
+
+            if not repeat_user:
+                # добавляет пользователя в базу данных
+                add_searching_users(session, first_name, last_name, user_id, user_url_page)
+
+                # отправляет ссылку на страницу найденного пользователя
+                bot.write_msg(myself_user_id, user_url_page)
+
+                # отфильтровывает и отправляет 3 популярные фотографии
+                photos_info = users_info.get_popular_photos(user_id)
+
+                if not photos_info:
+                    bot.write_msg(myself_user_id, 'Доступ к профилю ограничен...')
+                    continue
+
+                else:
+                    for photo in photos_info:
+                        if photos_info[photo] == user_id:
+                            continue
+
+                        else:
+                            bot.popular_photo_msg(myself_user_id,
+                                                  photo, )
+
+            else:
+                offset += 1
+                return self.return_users_info(city_id, sex, age_from, age_to, offset)
 
 
 if __name__ == '__main__':
@@ -236,6 +150,13 @@ if __name__ == '__main__':
     session = Session()
 
     bot = VKBot()
+    users_info = VKUsersInfo()
+
+    offset = 1
+    city_id = 0
+    sex = 0
+    age_from = 0
+    age_to = 0
 
     for event in bot.longpoll.listen():
         if event.type == VkEventType.MESSAGE_NEW:
@@ -245,50 +166,25 @@ if __name__ == '__main__':
                 myself_user_id = event.user_id
 
                 if request == 'поиск':
-                    city_id = bot.get_city(myself_user_id)
-                    sex = bot.get_sex(myself_user_id)
+                    city_info = users_info.get_myself_user_info(myself_user_id, 'city')
+                    city_id = city_info[0]['city']['id']
+
+                    if not city_id or type(city_id) == str:
+                        city = bot.get_city(myself_user_id)
+                        city_id = users_info.get_id_city_by_name(city)
+
+                    sex = users_info.get_sex(myself_user_id)
+
+                    if not sex:
+                        sex = bot.get_sex(myself_user_id)
+
                     age_from = bot.get_age_from(myself_user_id)
                     age_to = bot.get_age_to(myself_user_id)
+                    bot.return_users_info(city_id, sex, age_from, age_to, offset)
 
-                    searching_people = bot.search_users(city_id, sex, age_from, age_to)  # поиск подходящих пар
-
-                    for i in range(len(searching_people['items'])):
-                        user_id = searching_people['items'][i]['id']
-                        user_domain = searching_people['items'][i]['domain']
-                        first_name = searching_people['items'][i]['first_name']
-                        last_name = searching_people['items'][i]['last_name']
-                        user_url_page = 'https://vk.com/' + user_domain
-                        repeat_user = check_repeated_users(session, user_id)
-
-                        if not repeat_user:
-                            # добавляет пользователя в базу данных
-                            add_searching_users(session, first_name, last_name, user_id, user_url_page)
-
-                            # отправляет ссылку на страницу найденного пользователя
-                            bot.write_msg(myself_user_id, user_url_page)
-
-                            # отфильтровывает и отправляет 3 популярные фотографии
-                            photos_info = bot.get_popular_photos(user_id)
-
-                            if type(photos_info) == str:
-                                bot.write_msg(myself_user_id, photos_info)
-                                continue
-
-                            else:
-                                try:
-                                    for photo in photos_info:
-                                        if photos_info[photo] == user_id:
-                                            continue
-
-                                        else:
-                                            bot.search_result_photo_msg(myself_user_id,
-                                                                        photo, )
-
-                                except TypeError:
-                                    bot.write_msg(myself_user_id, 'Закрытый профиль.')
-
-                        else:
-                            continue
+                elif request == 'далее':
+                    offset += 1
+                    bot.return_users_info(city_id, sex, age_from, age_to, offset)
 
                 else:
                     bot.undefined_msg(myself_user_id)

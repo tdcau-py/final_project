@@ -1,17 +1,15 @@
 import os
-from typing import List
+from typing import List, Any
+from vk_api import vk_api, ApiError
 
-from vk_api import vk_api
 
-
-class VKBot:
+class VKUsersInfo:
     METHOD_USERS_SEARCH = 'users.search'
     METHOD_USERS_GET = 'users.get'
     METHOD_USERS_PHOTOS = 'photos.get'
     METHOD_CITIES_GET = 'database.getCities'
     VK_API_VERSION = '5.131'
     USER_TOKEN = os.getenv('VK_ACCESS_USER_TOKEN')
-    GROUP_TOKEN = os.getenv('VK_TOKEN')
 
     def __init__(self):
         self.params = {'access_token': self.USER_TOKEN,
@@ -20,9 +18,10 @@ class VKBot:
     def get_myself_user_info(self, user_id, field: str = None) -> List[dict]:
         """Информация о пользователе"""
         values = {'user_ids': user_id, 'fields': field}
-        return self.vk.method(self.METHOD_USERS_GET, values=values)
+        vk = vk_api.VkApi(token=self.USER_TOKEN)
+        return vk.method(self.METHOD_USERS_GET, values=values)
 
-    def _get_photos(self, user_id: int):
+    def _get_photos(self, user_id: int) -> dict:
         """Получает фотографии пользователя."""
         params = {'album_id': 'profile',
                   'owner_id': user_id,
@@ -32,53 +31,66 @@ class VKBot:
 
         try:
             response = vk.method(self.METHOD_USERS_PHOTOS, values=params)
-            return response
+            all_photos = response['items']
+            return all_photos
 
-        except vk_api.ApiError as error:
-            return error
+        except KeyError:
+            return {}
+
+        except vk_api.ApiError:
+            return {}
 
     def get_popular_photos(self, user_id: int) -> str | ApiError | dict[str, dict[str, Any]] | Any:
         """Возвращает самые популярные фотографии пользователя"""
         user_photos = self._get_photos(user_id)
         photos_data = {}
 
-        if type(user_photos) == dict:
-            if user_photos['count'] > 0:
-                for item in user_photos['items']:
-                    if len(photos_data) < 3:
-                        photos_data[f'photo{item["owner_id"]}_{item["id"]}'] = {'likes': item['likes']['count'],
-                                                                                'comments': item['comments']['count'], }
+        if user_photos:
+            for item in user_photos:
+                if len(photos_data) < 3:
+                    photos_data[f'photo{item["owner_id"]}_{item["id"]}'] = {'likes': item['likes']['count'],
+                                                                            'comments': item['comments']['count'], }
 
-                    else:
-                        for photo_data in photos_data:
-                            if item['likes']['count'] > photos_data[photo_data]['likes'] and \
-                                    item['comments']['count'] > photos_data[photo_data]['comments']:
-                                photos_data.pop(photo_data)
-                                photos_data[f'photo{item["owner_id"]}_{item["id"]}'] = {'likes': item['likes']['count'],
-                                                                                        'comments': item['comments']['count']}
-                                break
+                else:
+                    for photo_data in photos_data:
+                        if item['likes']['count'] > photos_data[photo_data]['likes'] and \
+                                item['comments']['count'] > photos_data[photo_data]['comments']:
+                            photos_data.pop(photo_data)
+                            photos_data[f'photo{item["owner_id"]}_{item["id"]}'] = {'likes': item['likes']['count'],
+                                                                                    'comments': item['comments']['count']}
+                            break
 
-                            elif item['likes']['count'] > photos_data[photo_data]['likes'] and \
-                                    item['comments']['count'] == photos_data[photo_data]['comments']:
-                                photos_data.pop(photo_data)
-                                photos_data[f'photo{item["owner_id"]}_{item["id"]}'] = {'likes': item['likes']['count'],
-                                                                                        'comments': item['comments']['count']}
-                                break
+                        elif item['likes']['count'] > photos_data[photo_data]['likes'] and \
+                                item['comments']['count'] == photos_data[photo_data]['comments']:
+                            photos_data.pop(photo_data)
+                            photos_data[f'photo{item["owner_id"]}_{item["id"]}'] = {'likes': item['likes']['count'],
+                                                                                    'comments': item['comments']['count']}
+                            break
 
-                            elif item['likes']['count'] == photos_data[photo_data]['likes'] and \
-                                    item['comments']['count'] > photos_data[photo_data]['comments']:
-                                photos_data.pop(photo_data)
-                                photos_data[f'photo{item["owner_id"]}_{item["id"]}'] = {'likes': item['likes']['count'],
-                                                                                        'comments': item['comments']['count']}
-                                break
+                        elif item['likes']['count'] == photos_data[photo_data]['likes'] and \
+                                item['comments']['count'] > photos_data[photo_data]['comments']:
+                            photos_data.pop(photo_data)
+                            photos_data[f'photo{item["owner_id"]}_{item["id"]}'] = {'likes': item['likes']['count'],
+                                                                                    'comments': item['comments']['count']}
+                            break
 
         else:
             return user_photos
 
         return photos_data
 
-    def _get_id_city_by_name(self, name_city: str):
-        """Получает города из базы"""
+    def get_id_city_from_info(self, user_id: int) -> int:
+        """Получает ID города из информации о пользователе"""
+        try:
+            city_info = self.get_myself_user_info(user_id, 'city')
+            city_id = city_info[0]['city']['id']
+            return int(city_id)
+
+        except Exception:
+            return False
+
+    def get_id_city_by_name(self, name_city: str) -> int | Any:
+        """Получает ID города из базы"""
         params = {'country_id': 1,
                   'need_all': 1,
                   'count': 1000, }
@@ -97,44 +109,6 @@ class VKBot:
         except KeyError:
             return 'Город не найден...'
 
-    def get_city(self, user_id):
-        """Запрашивает город, в котором необходимо осуществить поиск"""
-        try:
-            city = self.get_myself_user_info(user_id, 'city')
-            city_id = city[0]['city']['id']
-            return city_id
-
-        except Exception:
-            self.write_msg(user_id, 'Укажите город, в котором необходимо осуществить поиск...')
-
-            for event in self.longpoll.listen():
-                if event.type == VkEventType.MESSAGE_NEW:
-                    if event.to_me:
-                        name_city = event.text
-                        city_id = self._get_id_city_by_name(name_city)
-
-                        return city_id
-
-    def get_age_from(self, user_id):
-        """Выбор возраста"""
-        self.write_msg(user_id, 'Укажите минимальный возраст для поиска...')
-
-        for event in self.longpoll.listen():
-            if event.type == VkEventType.MESSAGE_NEW:
-                if event.to_me:
-                    age_low = event.text
-                    return age_low
-
-    def get_age_to(self, user_id):
-        """Максимальный возраст"""
-        self.write_msg(user_id, 'Укажите максимальный возраст для поиска...')
-
-        for event in self.longpoll.listen():
-            if event.type == VkEventType.MESSAGE_NEW:
-                if event.to_me:
-                    age_high = event.text
-                    return age_high
-
     def get_sex(self, user_id):
         """Выбор пола людей для поиска"""
         try:
@@ -147,20 +121,9 @@ class VKBot:
                 return 1
 
         except vk_api.ApiError:
-            self.write_msg(user_id, 'Укажите пол (мужской/женский) для поиска...')
+            return 0
 
-            for event in self.longpoll.listen():
-                if event.type == VkEventType.MESSAGE_NEW:
-                    if event.to_me:
-                        sex = event.text.lower()
-
-                        if sex == 'мужской':
-                            return 2
-
-                        elif sex == 'женский':
-                            return 1
-
-    def search_users(self, city, sex, age_from, age_to, status=1) -> dict:
+    def search_users(self, city, sex, age_from, age_to, offset, status=1) -> dict:
         """Поиск людей по критериям"""
         params = {'fields': 'bdate, city, sex, relation, domain',
                   'city_id': city,
@@ -169,10 +132,16 @@ class VKBot:
                   'age_from': age_from,
                   'age_to': age_to,
                   'is_closed': 0,
-                  'count': 1000,
+                  'count': 1,
+                  'offset': offset,
                   }
 
         vk = vk_api.VkApi(token=self.USER_TOKEN)
         response = vk.method(self.METHOD_USERS_SEARCH, values=params)
 
-        return response
+        try:
+            result = response['items']
+            return result
+
+        except KeyError:
+            return {}
