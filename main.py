@@ -2,16 +2,11 @@ from random import randrange
 import os
 import vk_api
 from vk_api.longpoll import VkLongPoll, VkEventType
-from db_manage import add_searching_users, create_table, check_repeated_users
+from db_manage import db_connection, add_searching_users, create_table, check_repeated_users
 from api_functions import VKUsersInfo
 
 
 class VKBot:
-    METHOD_USERS_SEARCH = 'users.search'
-    METHOD_USERS_GET = 'users.get'
-    METHOD_USERS_PHOTOS = 'photos.get'
-    METHOD_CITIES_GET = 'database.getCities'
-    VK_API_VERSION = '5.131'
     GROUP_TOKEN = os.getenv('VK_TOKEN')
 
     def __init__(self):
@@ -88,62 +83,56 @@ class VKBot:
 
     def undefined_msg(self, user_id):
         """Выводит сообщение о непонятной команде"""
-        message = "Не поняла вашего ответа..."
+        message = "Не поняла вашего запроса..."
         self.write_msg(user_id, message)
 
-    def return_users_info(self, city_id, sex, age_from, age_to, offset):
+    def return_users_info(self, user_id, city_id, sex, age_from, age_to, offset):
         """Возвращает найденных пользователей по одному"""
         searching_people = users_info.search_users(city_id, sex, age_from, age_to, offset)
 
-        for i in range(len(searching_people)):
-            user_id = searching_people[i]['id']
-            user_domain = searching_people[i]['domain']
-            first_name = searching_people[i]['first_name']
-            last_name = searching_people[i]['last_name']
-            user_url_page = 'https://vk.com/' + user_domain
-            repeat_user = check_repeated_users(session, user_id)
+        if searching_people:
+            for i in range(len(searching_people)):
+                user_id = searching_people[i]['id']
+                user_domain = searching_people[i]['domain']
+                first_name = searching_people[i]['first_name']
+                last_name = searching_people[i]['last_name']
+                user_url_page = 'https://vk.com/' + user_domain
+                repeat_user = check_repeated_users(session, user_id)
 
-            if not repeat_user:
-                # добавляет пользователя в базу данных
-                add_searching_users(session, first_name, last_name, user_id, user_url_page)
+                if not repeat_user:
+                    # добавляет пользователя в базу данных
+                    add_searching_users(session, first_name, last_name, user_id, user_url_page)
 
-                # отправляет ссылку на страницу найденного пользователя
-                bot.write_msg(myself_user_id, user_url_page)
+                    # отправляет ссылку на страницу найденного пользователя
+                    bot.write_msg(myself_user_id, user_url_page)
 
-                # отфильтровывает и отправляет 3 популярные фотографии
-                photos_info = users_info.get_popular_photos(user_id)
+                    # отфильтровывает и отправляет 3 популярные фотографии
+                    photos_info = users_info.get_popular_photos(user_id)
 
-                if not photos_info:
-                    bot.write_msg(myself_user_id, 'Доступ к профилю ограничен...')
-                    continue
+                    if not photos_info:
+                        bot.write_msg(myself_user_id, 'Доступ к профилю ограничен...')
+                        continue
+
+                    else:
+                        for photo in photos_info:
+                            if photos_info[photo] == user_id:
+                                continue
+
+                            else:
+                                bot.popular_photo_msg(myself_user_id,
+                                                      photo, )
 
                 else:
-                    for photo in photos_info:
-                        if photos_info[photo] == user_id:
-                            continue
-
-                        else:
-                            bot.popular_photo_msg(myself_user_id,
-                                                  photo, )
-
-            else:
-                offset += 1
-                return self.return_users_info(city_id, sex, age_from, age_to, offset)
+                    offset += 1
+                    return self.return_users_info(user_id, city_id, sex, age_from, age_to, offset)
+        else:
+            self.write_msg(user_id, 'Пользователи не найдены...')
 
 
 if __name__ == '__main__':
-    import sqlalchemy
     from sqlalchemy.orm import sessionmaker
 
-    LOGIN = os.getenv('DB_LOGIN')
-    PASSWORD = os.getenv('DB_PASSWORD')
-    HOST = os.getenv('DB_HOST')
-    PORT = os.getenv('DB_PORT')
-    DATABASE = 'vkinder_db'
-
-    DSN = f'postgresql://{LOGIN}:{PASSWORD}@{HOST}:{PORT}/{DATABASE}'
-    engine = sqlalchemy.create_engine(DSN)
-
+    engine = db_connection()
     create_table(engine)
 
     Session = sessionmaker(bind=engine)
@@ -180,11 +169,11 @@ if __name__ == '__main__':
 
                     age_from = bot.get_age_from(myself_user_id)
                     age_to = bot.get_age_to(myself_user_id)
-                    bot.return_users_info(city_id, sex, age_from, age_to, offset)
+                    bot.return_users_info(myself_user_id, city_id, sex, age_from, age_to, offset)
 
                 elif request == 'далее':
                     offset += 1
-                    bot.return_users_info(city_id, sex, age_from, age_to, offset)
+                    bot.return_users_info(myself_user_id, city_id, sex, age_from, age_to, offset)
 
                 else:
                     bot.undefined_msg(myself_user_id)

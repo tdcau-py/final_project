@@ -20,6 +20,19 @@ class People(Base):
         return f'User_VK: {self.first_name} {self.last_name}, user_id: {self.user_id}'
 
 
+def db_connection():
+    """Поключение к БД"""
+    LOGIN = os.getenv('DB_LOGIN')
+    PASSWORD = os.getenv('DB_PASSWORD')
+    HOST = os.getenv('DB_HOST')
+    PORT = os.getenv('DB_PORT')
+    DATABASE = 'vkinder_db'
+
+    DSN = f'postgresql://{LOGIN}:{PASSWORD}@{HOST}:{PORT}/{DATABASE}'
+    engine = sqlalchemy.create_engine(DSN)
+    return engine
+
+
 def create_table(engine):
     """Создает таблицы"""
     # Base.metadata.drop_all(engine)
