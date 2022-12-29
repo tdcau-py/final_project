@@ -140,6 +140,9 @@ if __name__ == '__main__':
 
     bot = VKBot()
     users_info = VKUsersInfo()
+    myself_user_id = os.getenv('VK_PROFILE_ID')
+
+    bot.greet_msg(myself_user_id)
 
     offset = 1
     city_id = 0
@@ -152,7 +155,7 @@ if __name__ == '__main__':
 
             if event.to_me:
                 request = event.text.lower()
-                myself_user_id = event.user_id
+                # myself_user_id = event.user_id
 
                 if request == 'поиск':
                     city_info = users_info.get_myself_user_info(myself_user_id, 'city')
