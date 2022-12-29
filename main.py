@@ -155,7 +155,6 @@ if __name__ == '__main__':
 
             if event.to_me:
                 request = event.text.lower()
-                # myself_user_id = event.user_id
 
                 if request == 'поиск':
                     city_info = users_info.get_myself_user_info(myself_user_id, 'city')
