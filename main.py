@@ -67,7 +67,6 @@ class VKBot:
     def greet_msg(self, user_id):
         """Выводит приветственное сообщение"""
         message = """
-            Привет!
             Используйте следующие команды для управления ботом:
                 \"поиск\" - для поиска подходящих пар;
                 \"далее\" - для получения следующей анкеты.
@@ -155,6 +154,7 @@ if __name__ == '__main__':
 
             if event.to_me:
                 request = event.text.lower()
+                myself_user_id = event.user_id
 
                 if request == 'поиск':
                     city_info = users_info.get_myself_user_info(myself_user_id, 'city')
@@ -179,3 +179,4 @@ if __name__ == '__main__':
 
                 else:
                     bot.undefined_msg(myself_user_id)
+                    bot.greet_msg(myself_user_id)
