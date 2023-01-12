@@ -121,7 +121,9 @@ class VKBot:
                                 bot.popular_photo_msg(myself_user_id, photo, )
 
                 else:
-                    break
+                    offset += 1
+                    return self.return_users_info(user_id, city_id, sex, age_from, age_to, offset)
+                    
         else:
             self.write_msg(user_id, 'Пользователи не найдены...')
 
