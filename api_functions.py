@@ -28,17 +28,18 @@ class VKUsersInfo:
                   'extended': 1}
 
         vk = vk_api.VkApi(token=self.USER_TOKEN)
+        response = vk.method(self.METHOD_USERS_PHOTOS, values=params)
 
         try:
-            response = vk.method(self.METHOD_USERS_PHOTOS, values=params)
             all_photos = response['items']
-            return all_photos
 
         except KeyError:
             return {}
 
         except vk_api.ApiError:
             return {}
+
+        return all_photos
 
     def get_popular_photos(self, user_id: int) -> str | ApiError | dict[str, dict[str, Any]] | Any:
         """Возвращает самые популярные фотографии пользователя"""
@@ -81,13 +82,15 @@ class VKUsersInfo:
 
     def get_id_city_from_info(self, user_id: int) -> int:
         """Получает ID города из информации о пользователе"""
+        city_info = self.get_myself_user_info(user_id, 'city')
+
         try:
-            city_info = self.get_myself_user_info(user_id, 'city')
             city_id = city_info[0]['city']['id']
-            return int(city_id)
 
         except Exception:
             return False
+
+        return int(city_id)
 
     def get_id_city_by_name(self, name_city: str) -> int | Any:
         """Получает ID города из базы"""
@@ -101,27 +104,27 @@ class VKUsersInfo:
         try:
             cities_list = response['items']
 
-            for city in cities_list:
-                if city['title'] == name_city.capitalize():
-                    city_id = city['id']
-                    return int(city_id)
-
         except KeyError:
             return 'Город не найден...'
+
+        for city in cities_list:
+            if city['title'] == name_city.capitalize():
+                city_id = city['id']
+                return int(city_id)
 
     def get_sex(self, user_id):
         """Выбор пола людей для поиска"""
         try:
             sex = self.get_myself_user_info(user_id, 'sex')
 
-            if sex[0]['sex'] == 1:
-                return 2
-
-            elif sex[0]['sex'] == 2:
-                return 1
-
         except vk_api.ApiError:
             return 0
+
+        if sex[0]['sex'] == 1:
+            return 2
+
+        elif sex[0]['sex'] == 2:
+            return 1
 
     def search_users(self, city, sex, age_from, age_to, offset, status=1) -> dict:
         """Поиск людей по критериям"""
@@ -141,7 +144,8 @@ class VKUsersInfo:
 
         try:
             result = response['items']
-            return result
 
         except KeyError:
             return {}
+
+        return result

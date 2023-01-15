@@ -139,9 +139,6 @@ if __name__ == '__main__':
 
     bot = VKBot()
     users_info = VKUsersInfo()
-    myself_user_id = os.getenv('VK_PROFILE_ID')
-
-    bot.greet_msg(myself_user_id)
 
     offset = 1
     city_id = 0
@@ -150,7 +147,11 @@ if __name__ == '__main__':
     age_to = 0
 
     for event in bot.longpoll.listen():
-        if event.type == VkEventType.MESSAGE_NEW:
+        if event.type == VkEventType.USER_TYPING_IN_CHAT:
+            myself_user_id = event.user_id
+            bot.greet_msg(myself_user_id)
+
+        elif event.type == VkEventType.MESSAGE_NEW:
 
             if event.to_me:
                 request = event.text.lower()
